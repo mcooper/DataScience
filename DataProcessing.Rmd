@@ -1,0 +1,104 @@
+#Here is a document covering data sources and data processing methods used so far for CI Data Science's ENSO app
+
+
+###ENSO measurement data
+SOI Data from http://www.bom.gov.au/climate/current/soihtm1.shtml
+ONI Data from http://www.cpc.ncep.noaa.gov/products/analysis_monitoring/ensostuff/ensoyears.shtml
+
+
+For precip data from 1900-2014, data was collected from 
+http://climate.geog.udel.edu/~climate/html_pages/download.html#P2014
+and is documented here: http://climate.geog.udel.edu/~climate/html_pages/Global2014/README.GlobalTsP2014.html
+It was processed using the following script:
+
+```
+library(raster)
+
+files <- list.files('DowloadedFortranFiles')
+cols <- paste0('V', seq(3,14))
+Months <- c('01','02','03','04','05','06','07','08','09','10','11','12')
+
+for (f in files){
+  ftdf <- read.fortran(paste0('DowloadedFortranFiles/',f), c("F8.3","F8.3","12F8.1"))
+  ftdf$V1 <- ftdf$V1*1000
+  ftdf$V2 <- ftdf$V2*1000
+  print(f)
+  for (i in seq(1,12)){
+    rast <- rasterFromXYZ(ftdf[c('V1','V2',cols[i])], 
+                          crs='+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0')
+    writeRaster(rast, paste0('1900-2014/',substr(f,8,11),'-',Months[i]), format='ascii', overwrite=T)
+    print(Months[i])
+  }
+}
+
+```
+
+For precip data from 2015-, data was collected from 
+http://rda.ucar.edu/datasets/ds502.0/ and was processed like this:
+
+**Its on my home computer, will finish this later...**
+
+```
+old <- raster('ReadyRasters/1994-08.asc')
+
+oldrasts <- c('January','February','March','April','May','June','July','August',
+              'September','October','November','December','January16','February16')
+newrasts <- c('2015-01','2015-02','2015-03','2015-04','2015-05','2015-06','2015-07',
+              '2015-08','2015-09','2015-10','2015-11','2015-12','2016-01','2016-02')
+
+setwd('C:/Data Science/ENSO/')
+
+for (i in seq(9,14)){
+    r <- raster(paste0('2014-present\\Monthy Rasters\\', oldrasts[i], '.asc'))
+    extent(r) <- extent(0,360,-60,60)
+    rr <- rotate(r)
+    test <- resample(rr, old)
+    test[is.na(old)] <- NA
+    writeRaster(test, paste0('ReadyRasters\\',newrasts[i],'.asc'), format='ascii')
+    print(newrasts[i])
+}
+
+
+```
+
+This is how the raster files were combined, and then a test graph was made using points form Uttar Pradesh and Los Angeles:
+
+```
+library(ggplot2)
+library(lubridate)
+
+setwd('C:/Data Science/ENSO/ReadyRasters')
+rasts <- list.files()
+test <- brick(stack(as.list(rasts), quickly=T))
+UP <- extract(test, SpatialPoints(data.frame(x=80.7811909, y=26.9043351)))
+LA <- extract(test, SpatialPoints(data.frame(x=-118.2582914, y=34.0789452)))
+
+
+UPdf <- data.frame(precip=UP[1,], date=parse_date_time(substr(colnames(UP),2,8), "Ym"))
+plot(precip~date, data=UPdf[1000:1394,], type='l')
+UPdf <- merge(UPdf, soi, by='date', all.x=T)
+
+
+ggplot(UPdf, aes(date, precip))+ 
+  ggtitle('Rainfall vs ENSO phase in UP') +
+  geom_rect(aes(NULL, NULL, 
+                xmin=date-months(1), xmax=date+months(1), 
+                ymin=0, ymax=max(precip), 
+                fill=phase), alpha=.5) + scale_fill_manual(values = c('#bfe0fc','#fcbfbf','White')) + 
+  geom_line(size=.5) + theme(axis.text=element_text(size=12), axis.title=element_text(size=14,face="bold"), title=element_text(size=18,face='bold'))+ scale_y_continuous(expand = c(0,0))
+
+
+LAdf <- data.frame(precip=LA[1,], date=parse_date_time(substr(colnames(LA),2,8), "Ym"))
+LAdf <- merge(LAdf, soi, by='date', all.x=T)
+plot(precip~date, data=LAdf[1000:1394,], type='l')
+
+
+ggplot(LAdf, aes(date, precip))+ 
+  ggtitle('Rainfall vs ENSO phase in Los Angeles') +
+  geom_rect(aes(NULL, NULL, 
+                xmin=date-months(1), xmax=date+months(1), 
+                ymin=0, ymax=max(precip), 
+                fill=phase), alpha=.5) + scale_fill_manual(values = c('#bfe0fc','#fcbfbf','White')) + 
+  geom_line(size=.5) + theme(axis.text=element_text(size=12), axis.title=element_text(size=14,face="bold"), title=element_text(size=18,face='bold'))+ scale_y_continuous(expand = c(0,0))
+
+```
