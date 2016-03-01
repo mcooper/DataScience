@@ -43,6 +43,6 @@ getENSOstdevRast <- function(metric=c('soi','oni'), value){
   ENSOstdev
 }
 
-#plot(getENSOstdevRast('oni', 1.25))
+#plot(getENSOstdevRast('oni', 1.5))
 
 #plot(getENSOstdevRast('soi', -20))
